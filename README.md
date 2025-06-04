@@ -24,9 +24,7 @@ yarn install
 
 This project uses Yarn Plug'n'Play (PnP), so `node_modules/` folder will not exist.
 
----
-
-## Scripts Build
+### Bundling Scripts
 
 To bundle all CLI scripts, run:
 
@@ -58,9 +56,7 @@ Remember to source the alias to enable the command in your shell:
 source ~/.aliases
 ```
 
----
-
-## `scriptmap.json`
+### `scriptmap.json`
 
 The `scriptmap.json` file serves as the manifest for all buildable scripts. Each entry defines:
 
@@ -111,9 +107,20 @@ yarn build svg-theme-merger --alias svgmerge
 ```
 
 ---
-# SCRIPTS
+---
+---
+---
+---
+---
+---
+```
+ __ __ __   __ ___ __
+(_ /  |__)||__) | (_ 
+__)\__| \ ||    | __)
 
-## svg-theme-merger
+```
+
+# svg-theme-merger
 
 This script merges two nearly identical SVG images—differing only by fill and stroke color—into a single responsive SVG. It is designed to handle:
 
