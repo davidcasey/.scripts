@@ -14,7 +14,7 @@
 ```
 
 
-## 📦 Install & Setup
+## Install & Setup
 
 Install dependencies using Yarn 4+:
 
@@ -26,7 +26,7 @@ This project uses Yarn Plug'n'Play (PnP), so `node_modules/` folder will not exi
 
 ---
 
-## 🛠️ Building Scripts
+## Scripts Build
 
 To bundle all CLI scripts, run:
 
@@ -60,7 +60,7 @@ source ~/.aliases
 
 ---
 
-## 🔧 `scriptmap.json`
+## `scriptmap.json`
 
 The `scriptmap.json` file serves as the manifest for all buildable scripts. Each entry defines:
 
@@ -84,7 +84,36 @@ You can add more entries to this file as you develop new scripts. Each object ke
 
 ---
 
-## 🌟 svg-theme-merger
+## Script Development
+
+This repo uses a custom script builder located at `.scripts/build.mjs` to bundle and alias Node.js CLI scripts with no external dependencies at runtime.
+
+Scripts that are ready for prime time are moved to the `public/` folder.
+
+### How it works
+
+- Input: `.scripts/src/<script-name>.mjs`
+- Output: `.scripts/public/<script-name>.bundle.js` (fully self-contained)
+- Bundler: esbuild via Yarn PnP (no need to install globally)
+- Aliases: Written to `~/.aliases`, under the `# .scripts` section
+
+### Examples
+
+```bash
+# Build svg-theme-merger.mjs without alias:
+yarn build svg-theme-merger
+
+# Build and create alias named svg-theme-merger (default alias):
+yarn build svg-theme-merger --alias
+
+# Build and create alias named svgmerge:
+yarn build svg-theme-merger --alias svgmerge
+```
+
+---
+# SCRIPTS
+
+## svg-theme-merger
 
 This script merges two nearly identical SVG images—differing only by fill and stroke color—into a single responsive SVG. It is designed to handle:
 
@@ -123,30 +152,3 @@ This command will:
 svgmerge logo
 ```
 
----
-
-## 💡 Script Development
-
-This repo uses a custom script builder located at `.scripts/build.mjs` to bundle and alias Node.js CLI scripts with no external dependencies at runtime.
-
-Scripts that are ready for prime time are moved to the `public/` folder.
-
-### How it works
-
-- Input: `.scripts/src/<script-name>.mjs`
-- Output: `.scripts/public/<script-name>.bundle.js` (fully self-contained)
-- Bundler: esbuild via Yarn PnP (no need to install globally)
-- Aliases: Written to `~/.aliases`, under the `# .scripts` section
-
-### Examples
-
-```bash
-# Build svg-theme-merger.mjs without alias:
-yarn build svg-theme-merger
-
-# Build and create alias named svg-theme-merger (default alias):
-yarn build svg-theme-merger --alias
-
-# Build and create alias named svgmerge:
-yarn build svg-theme-merger --alias svgmerge
-```
