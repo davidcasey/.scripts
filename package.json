@@ -1,0 +1,11 @@
+{
+  "name": "scripts",
+  "packageManager": "yarn@4.6.0",
+  "scripts": {
+    "build": "node ./build.mjs"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "esbuild": "^0.20.0"
+  }
+}
