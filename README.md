@@ -14,6 +14,18 @@
 ```
 
 I keep this project in my home directory `~/.scripts/`
+## Building Scripts (new install)
+To bundle all included CLI scripts for use, run:
+
+``` bash
+yarn build
+```
+This will:
+- Traverse all known scripts listed in scriptmap.json
+- Compile each .mjs or .ts file in .scripts/src/
+- Output bundled Node.js executables to .scripts/public/
+- Update scriptmap.json to remove dead entries
+- Add aliases (if any) to your ~/.aliases file
 
 ## svg-theme-merger
 This script merges two nearly identical SVG images—differing only by fill and stroke color—into a single responsive SVG. It is designed to handle:
