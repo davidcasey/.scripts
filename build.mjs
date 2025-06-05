@@ -17,7 +17,8 @@ const banner = String.raw`
 const isChild = process.env.IS_CHILD === 'true';
 
 const args = process.argv.slice(2);
-const filename = args.find(arg => !arg.startsWith('--'));
+const rawInput = args.find(arg => !arg.startsWith('--'));
+const filename = rawInput?.replace(/\.(mjs|ts)$/, '');
 const aliasArgIndex = args.indexOf('--alias');
 const customAlias = aliasArgIndex !== -1 ? args[aliasArgIndex + 1] : null;
 
