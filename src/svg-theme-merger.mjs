@@ -4,138 +4,135 @@ import fs from 'fs/promises';
 import path from 'path';
 import { load } from 'cheerio';
 
-async function main() {
-  try {
-    if (process.argv.length < 3) {
-      console.error('Usage: node svg-theme-merger.mjs <filename-or-path-to-base>');
-      process.exit(1);
-    }
-
-    let inputArg = process.argv[2];
-    let baseName, dir;
-
-    // If input is a directory or path ending with '/', treat as directory + basename
-    if (inputArg.endsWith(path.sep)) {
-      dir = inputArg;
-      baseName = path.basename(path.resolve(inputArg));
-    } else {
-      baseName = path.basename(inputArg);
-      dir = path.dirname(inputArg);
-      if (dir === '') dir = '.';
-    }
-
-    // Compose file paths
-    const lightFile = path.resolve(dir, `${baseName}-LIGHT.svg`);
-    const darkFile = path.resolve(dir, `${baseName}-DARK.svg`);
-    const outFile = path.resolve(dir, `${baseName}.svg`);
-
-    // Read files
-    let [lightSvg, darkSvg] = await Promise.all([
-      fs.readFile(lightFile, 'utf8').catch(() => null),
-      fs.readFile(darkFile, 'utf8').catch(() => null),
-    ]);
-
-    if (!lightSvg || !darkSvg) {
-      console.error(`❌ Missing input files:\n  ${!lightSvg ? lightFile : ''}\n  ${!darkSvg ? darkFile : ''}`);
-      process.exit(1);
-    }
-
-    // Load SVG with cheerio
-    const $light = load(lightSvg, { xmlMode: true });
-    const $dark = load(darkSvg, { xmlMode: true });
-
-    // Find existing <style> tag or create one inside <svg>
-    let styleTag = $light('svg > style').first();
-    if (!styleTag.length) {
-      // No <style> tag inside <svg>, create one at top
-      $light('svg').prepend('<style></style>');
-      styleTag = $light('svg > style').first();
-    }
-
-    // Collect color classes to inject
-    const fillColors = new Set();
-    const strokeColors = new Set();
-
-    // Helper to normalize colors (lowercase, no spaces)
-    function normColor(c) {
-      return c ? c.trim().toLowerCase() : '';
-    }
-
-    // Recursive function to walk all elements in LIGHT SVG
-    function walkElements(lightEl, darkEl) {
-      // Compare fill & stroke colors
-      const lightFill = normColor($light(lightEl).attr('fill'));
-      const darkFill = normColor($dark(darkEl).attr('fill'));
-
-      const lightStroke = normColor($light(lightEl).attr('stroke'));
-      const darkStroke = normColor($dark(darkEl).attr('stroke'));
-
-      let classesToAdd = [];
-
-      if (darkFill && darkFill !== lightFill && darkFill !== 'none') {
-        const cls = `fill-${darkFill.replace(/^#/, '')}`;
-        fillColors.add(darkFill.replace(/^#/, ''));
-        classesToAdd.push(cls);
-      }
-      if (darkStroke && darkStroke !== lightStroke && darkStroke !== 'none') {
-        const cls = `stroke-${darkStroke.replace(/^#/, '')}`;
-        strokeColors.add(darkStroke.replace(/^#/, ''));
-        classesToAdd.push(cls);
-      }
-
-      if (classesToAdd.length > 0) {
-        const existingClass = $light(lightEl).attr('class') || '';
-        // Append new classes, keep existing ones
-        const newClass = existingClass
-          ? existingClass + ' ' + classesToAdd.join(' ')
-          : classesToAdd.join(' ');
-        $light(lightEl).attr('class', newClass.trim());
-      }
-
-      // Recurse for children
-      const lightChildren = $light(lightEl).children().toArray();
-      const darkChildren = $dark(darkEl).children().toArray();
-
-      for (let i = 0; i < lightChildren.length; i++) {
-        if (darkChildren[i]) {
-          walkElements(lightChildren[i], darkChildren[i]);
-        }
-      }
-    }
-
-    // Start from root <svg> children
-    const lightRootChildren = $light('svg').children().toArray();
-    const darkRootChildren = $dark('svg').children().toArray();
-
-    for (let i = 0; i < lightRootChildren.length; i++) {
-      if (darkRootChildren[i]) {
-        walkElements(lightRootChildren[i], darkRootChildren[i]);
-      }
-    }
-
-    // Build CSS rules for dark mode media query
-    let cssRules = '@media (prefers-color-scheme: dark) {\n';
-
-    for (const fill of fillColors) {
-      cssRules += `  .fill-${fill} { fill: #${fill}; }\n`;
-    }
-    for (const stroke of strokeColors) {
-      cssRules += `  .stroke-${stroke} { stroke: #${stroke}; }\n`;
-    }
-
-    cssRules += '}\n';
-
-    // Append CSS to style tag content (append, don't replace)
-    const oldCss = styleTag.html() || '';
-    styleTag.html(oldCss + '\n' + cssRules);
-
-    // Write output file
-    await fs.writeFile(outFile, $light.xml(), 'utf8');
-    console.log(`✅ Merged SVG written to: ${outFile}`);
-  } catch (err) {
-    console.error(err);
-    process.exit(1);
-  }
+function normalizeColor(color) {
+  return color.trim().toLowerCase().replace(/^#/, '');
 }
 
-main();
+function addClass($el, className) {
+  const existing = $el.attr('class');
+  const classes = new Set((existing || '').split(/\s+/).filter(Boolean));
+  classes.add(className);
+  $el.attr('class', Array.from(classes).join(' '));
+}
+
+async function main() {
+  const input = process.argv[2];
+  if (!input) {
+    console.error('Usage: svg-theme-merger <filename>');
+    process.exit(1);
+  }
+
+  const dir = path.dirname(input);
+  const base = path.basename(input);
+  const outFile = path.resolve(dir, `${base}.svg`);
+  const darkFile = path.resolve(dir, `${base}-DARK.svg`);
+  const lightFile = path.resolve(dir, `${base}-LIGHT.svg`);
+
+  const [lightSvg, darkSvg] = await Promise.all([
+    fs.readFile(lightFile, 'utf8'),
+    fs.readFile(darkFile, 'utf8'),
+  ]);
+
+  const $light = load(lightSvg, { xmlMode: true });
+  const $dark = load(darkSvg, { xmlMode: true });
+
+  // Ensure there is a <style> tag inside <svg>
+  const styleTag = $light('svg > style').first();
+  if (!styleTag.length) {
+    $light('svg').prepend('<style></style>');
+  }
+
+  const fillSet = new Set();
+  const strokeSet = new Set();
+
+  // Maps to track LIGHT color -> DARK color for fill and stroke
+  const lightToDarkFillMap = new Map();
+  const lightToDarkStrokeMap = new Map();
+
+  // Keep track of LIGHT elements that did not get a match in the first pass
+  const unmatchedElements = [];
+
+  const lightElems = $light('*').toArray();
+  const darkElems = $dark('*').toArray();
+
+  // First pass: match elements pairwise by index
+  for (let i = 0; i < lightElems.length; i++) {
+    const $lightEl = $light(lightElems[i]);
+    const $darkEl = darkElems[i] ? $dark(darkElems[i]) : null;
+
+    const lightFillRaw = $lightEl.attr('fill');
+    const darkFillRaw = $darkEl?.attr('fill');
+    const lightStrokeRaw = $lightEl.attr('stroke');
+    const darkStrokeRaw = $darkEl?.attr('stroke');
+
+    const lightFill = lightFillRaw ? normalizeColor(lightFillRaw) : null;
+    const darkFill = darkFillRaw ? normalizeColor(darkFillRaw) : null;
+    const lightStroke = lightStrokeRaw ? normalizeColor(lightStrokeRaw) : null;
+    const darkStroke = darkStrokeRaw ? normalizeColor(darkStrokeRaw) : null;
+
+    let matched = false;
+
+    // Handle fill color differences
+    if (darkFill && darkFill !== 'none' && darkFill !== lightFill) {
+      addClass($lightEl, `fill-${darkFill}`);
+      fillSet.add(darkFill);
+      if (lightFill) lightToDarkFillMap.set(lightFill, darkFill);
+      matched = true;
+    }
+
+    // Handle stroke color differences
+    if (darkStroke && darkStroke !== 'none' && darkStroke !== lightStroke) {
+      addClass($lightEl, `stroke-${darkStroke}`);
+      strokeSet.add(darkStroke);
+      if (lightStroke) lightToDarkStrokeMap.set(lightStroke, darkStroke);
+      matched = true;
+    }
+
+    // If no difference or no dark element, mark for second pass
+    if (!matched) {
+      unmatchedElements.push($lightEl);
+    }
+  }
+
+  // Second pass: assign classes to unmatched LIGHT elements based on known mappings
+  for (const $lightEl of unmatchedElements) {
+    const lightFillRaw = $lightEl.attr('fill');
+    const lightStrokeRaw = $lightEl.attr('stroke');
+    const lightFill = lightFillRaw ? normalizeColor(lightFillRaw) : null;
+    const lightStroke = lightStrokeRaw ? normalizeColor(lightStrokeRaw) : null;
+
+    if (lightFill && lightToDarkFillMap.has(lightFill)) {
+      const darkFill = lightToDarkFillMap.get(lightFill);
+      addClass($lightEl, `fill-${darkFill}`);
+      fillSet.add(darkFill);
+    }
+
+    if (lightStroke && lightToDarkStrokeMap.has(lightStroke)) {
+      const darkStroke = lightToDarkStrokeMap.get(lightStroke);
+      addClass($lightEl, `stroke-${darkStroke}`);
+      strokeSet.add(darkStroke);
+    }
+  }
+
+  // Build the CSS for dark mode color overrides
+  let css = '\n@media (prefers-color-scheme: dark) {\n';
+  for (const color of fillSet) {
+    css += `  .fill-${color} { fill: #${color}; }\n`;
+  }
+  for (const color of strokeSet) {
+    css += `  .stroke-${color} { stroke: #${color}; }\n`;
+  }
+  css += '}\n';
+
+  // Append CSS inside <style> tag
+  $light('svg > style').first().append(css);
+
+  // Write the merged SVG file
+  await fs.writeFile(outFile, $light.xml(), 'utf8');
+  console.log(`✅ Wrote merged file: ${outFile}`);
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
