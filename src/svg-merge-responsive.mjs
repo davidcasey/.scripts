@@ -5,7 +5,11 @@ import path from 'path';
 import { load } from 'cheerio';
 
 function normalizeColor(color) {
-  return color.trim().toLowerCase().replace(/^#/, '');
+  const hex = color.trim().toLowerCase().replace(/^#/, '');
+  if (hex.length === 3) {
+    return hex.split('').map(c => c + c).join(''); // expand shorthand
+  }
+  return hex;
 }
 
 function addClass($el, className) {
@@ -18,7 +22,8 @@ function addClass($el, className) {
 async function main() {
   const input = process.argv[2];
   if (!input) {
-    console.error('Usage: svg-theme-merger <filename>');
+    const cmd = path.basename(process.argv[1]);
+    console.error(`Usage: ${cmd} <filename>`);
     process.exit(1);
   }
 
