@@ -1,5 +1,14 @@
 {
   "svg-merge-responsive.mjs": {
-    "alias": "svgmerge"
+    "alias": "svgmerge",
+    "description": "Merges LIGHT and DARK themed SVGs into a responsive single SVG.",
+    "args": ["[path/to/filename]"],
+    "example": "svgmerge logo"
+  },
+  "mktests.mjs": {
+    "alias": "mktests",
+    "description": "Creates test files for all source files in a directory",
+    "args": ["[directory]"],
+    "example": "mktests src/hooks/i18n"
   }
 }

@@ -65,7 +65,7 @@ The `scriptmap.json` file serves as the manifest for all buildable scripts. Each
   "svg-theme-merger.mjs": {
     "alias": "svgmerge",
     "description": "Merges LIGHT and DARK themed SVGs into a responsive single SVG.",
-    "args": ["<path/to/filename>"],
+    "args": ["[path/to/filename]"],
     "example": "svgmerge logo"
   },
   "another-script.mjs": {
@@ -108,11 +108,6 @@ yarn build svg-theme-merger --alias svgmerge
 
 ---
 ---
----
----
----
----
----
 ```
  __ __ __   __ ___ __
 (_ /  |__)||__) | (_ 
@@ -142,10 +137,10 @@ Where `[path/to/filename]` is the base filename without the `-LIGHT.svg` or `-DA
 After building and aliasing the script (see Bundling CLI Scripts), you can run:
 
 ```bash
-svgmerge <path/to/filename>
+svgmerge [path/to/filename]
 ```
 
-Where `<path/to/filename>` is the base name of your SVG theme to merge (e.g., `logo`).
+Where `[path/to/filename]` is the base name of your SVG theme to merge (e.g., `logo`).
 
 This command will:
 
@@ -159,3 +154,50 @@ This command will:
 svgmerge logo
 ```
 
+---
+
+# mktests
+
+This script creates test files for all source files in a directory. It supports TypeScript, JavaScript, and their React variants (.ts, .tsx, .js, .jsx).
+
+### Usage
+
+```bash
+mktests [directory]
+```
+
+Where `[directory]` is the path to scan for source files (defaults to current directory).
+
+### Alias Usage
+
+After building and aliasing the script:
+
+```bash
+mktests src/hooks/i18n     # Creates test files for all hooks
+mktests src/components     # Works with React components
+mktests                    # Current directory
+```
+
+### What it does
+
+- Scans for `.ts`, `.tsx`, `.js`, `.jsx` files
+- Skips existing test files (`*.test.*`, `*.spec.*`)
+- Skips `index.*` files
+- Creates empty test files with matching extensions
+- Example: `Button.tsx` → `Button.test.tsx`
+
+### Example
+
+```bash
+mktests src/hooks/i18n
+```
+
+Output:
+```
+Creating test files in src/hooks/i18n...
+  ✓ useSetLocale.test.ts
+  ✓ useResetI18n.test.ts
+  ✓ useFormatDate.test.ts
+  
+Created 3 test files.
+```
