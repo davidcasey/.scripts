@@ -349,14 +349,14 @@ async function main() {
     const allUnsummarised = findUnsummarisedWeeks(year, week);
     toProcess = FLAG_LATEST
       ? [allUnsummarised[0]]
-      : [...allUnsummarised].reverse();
+      : allUnsummarised;
     if (FLAG_LATEST) {
       console.log(`Most recent unsummarised week: ${toProcess[0].year}-W${pad(toProcess[0].week)}`);
       if (allUnsummarised.length > 1) {
         console.log(`(${allUnsummarised.length - 1} older unsummarised week(s) — run without --latest to backfill)`);
       }
     } else {
-      console.log(`Processing ${toProcess.length} unsummarised week(s), oldest first.`);
+      console.log(`Processing ${toProcess.length} unsummarised week(s), newest first.`);
     }
   }
 
