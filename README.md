@@ -201,3 +201,11 @@ Creating test files in src/hooks/i18n...
   
 Created 3 test files.
 ```
+
+---
+
+# Summarizer
+
+AI-driven weekly and quarterly PR summary pipeline that writes Obsidian-compatible Markdown into the journal vault. Fetches from GitHub, GHE, and Bitbucket; detects languages and per-repo LOC from diffs; generates Mermaid charts in quarterly rollups.
+
+See [src/summarizer/SUMMARIZER.md](src/summarizer/SUMMARIZER.md) for setup, configuration, and usage.

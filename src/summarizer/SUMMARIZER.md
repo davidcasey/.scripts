@@ -117,7 +117,7 @@ TOKEN_GHE=ghp_xxxxxxxxxxxx
 
 ---
 
-### GitHub.com (Personal)
+### GitHub.com
 
 Create a **classic personal access token** at:
 `https://github.com/settings/tokens`
@@ -179,6 +179,7 @@ node src/summarizer/summary-weekly.mjs --rebuild --week 2026-W25
 - Token permissions were upgraded and you want accurate language data
 - `reviewed_pr_count` or `authored_pr_count` frontmatter is wrong
 - The frontmatter schema changed and existing files need to be brought up to date
+- New features have been added and you need retrofitting
 
 **Frontmatter fields written:**
 
