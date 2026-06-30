@@ -1,0 +1,27 @@
+[
+  {
+    "accountDisplayName": "Your GHE Account Name",
+    "type": "ghe",
+    "host": "https://your-ghe-host.com",
+    "org": "YourOrg",
+    "username": "your-ghe-username",
+    "tokenEnvVar": "TOKEN_GHE"
+  },
+  {
+    "accountDisplayName": "Your GitHub Account Name",
+    "type": "github",
+    "host": "https://github.com",
+    "org": "",
+    "username": "your-github-username",
+    "tokenEnvVar": "TOKEN_GITHUB"
+  },
+  {
+    "accountDisplayName": "Your Bitbucket Account Name",
+    "type": "bitbucket",
+    "workspace": "your-workspace-slug",
+    "email": "you@yourcompany.com",
+    "nickname": "Your Display Name",
+    "accountId": "712020:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "tokenEnvVar": "TOKEN_BITBUCKET"
+  }
+]

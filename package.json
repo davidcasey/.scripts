@@ -1,11 +1,19 @@
 {
   "name": "scripts",
-  "packageManager": "yarn@4.6.0",
+  "packageManager": "pnpm@10.13.1",
   "scripts": {
     "build": "node ./build.mjs"
   },
   "dependencies": {
-    "cheerio": "^1.0.0",
-    "esbuild": "^0.20.0"
+    "@anthropic-ai/sdk": "^0.107.0",
+    "@octokit/rest": "^22.0.1",
+    "cheerio": "^1.2.0",
+    "esbuild": "^0.20.2",
+    "openai": "^6.45.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
