@@ -395,8 +395,8 @@ async function main() {
 
   for (const { year, week } of weeks) {
     const { start, end } = weekBounds(year, week);
-    const weekDir  = join(TEAM_ROOT, String(year), `W${pad(week)}`);
-    const outPath  = join(weekDir, `${year}-W${pad(week)}-${SUMMARY_SUFFIX}.md`);
+    const yearDir  = join(TEAM_ROOT, String(year));
+    const outPath  = join(yearDir, `${year}-W${pad(week)}-${SUMMARY_SUFFIX}.md`);
 
     if (existsSync(outPath) && !FLAG_REBUILD) {
       console.log(`\n${year}-W${pad(week)}: heartbeat exists, skipping (use --rebuild to overwrite).`);
@@ -444,7 +444,7 @@ async function main() {
     const uncat = domainResults.find(d => d.name === UNCATEGORIZED)?.prs.length || 0;
     if (uncat) console.log(`  ${uncat} PR(s) uncategorized — extend the taxonomy in team.json if this is large.`);
 
-    mkdirSync(weekDir, { recursive: true });
+    mkdirSync(yearDir, { recursive: true });
     writeFileSync(outPath, buildMarkdown(year, week, teamSummary, domainResults, languages, names, suggestions), "utf8");
     console.log(`  Written: ${outPath}`);
   }

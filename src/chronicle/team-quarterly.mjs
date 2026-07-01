@@ -57,15 +57,15 @@ function readWeeklyHeartbeats(year, q) {
 
   for (const { year: wYear, week } of weeks) {
     const weekStr = pad(week);
-    const weekDir = join(TEAM_ROOT, String(wYear), `W${weekStr}`);
-    if (!existsSync(weekDir)) continue;
+    const yearDir = join(TEAM_ROOT, String(wYear));
+    if (!existsSync(yearDir)) continue;
 
-    const files = readdirSync(weekDir);
-    const file = files.find(f => f.includes(SUMMARY_SUFFIX) && f.endsWith(".md"));
+    // Weekly heartbeats live directly in the year folder, named {year}-W{ww}-{suffix}.md.
+    const file = readdirSync(yearDir).find(f => f.startsWith(`${wYear}-W${weekStr}-`) && f.endsWith(".md"));
     if (!file) continue;
 
-    const content = readFileSync(join(weekDir, file), "utf8");
-    const relPath = `W${weekStr}/${file}`;
+    const content = readFileSync(join(yearDir, file), "utf8");
+    const relPath = file; // same folder as the quarterly output → link by filename
     out.push({ year: wYear, week, weekStr, relPath, content });
   }
   return out;
@@ -203,7 +203,7 @@ Instructions:
 - Write 2–5 sentence bullets per feature/theme — more context and impact than the weekly bullets.
 - Merge overlapping work across weeks into a single bullet.
 - Include Obsidian-relative source links after each bullet using the format:
-  → [Week NN](../WNN/filename.md)
+  → [Week NN](filename.md)
 - Use the exact filenames from the ref: paths provided.${styleBlock}
 
 Return the following, in this exact order, with no preamble and no code fences:
@@ -218,14 +218,14 @@ OVERVIEW:
 ### [Thematic Group]
 
 - **Feature name** — What was accomplished and its impact.
-  → [Week 04](../W04/2026-W04-Heartbeat.md)
+  → [Week 04](2026-W04-Heartbeat.md)
 
 ## [Another Domain]
 
 ### [Theme]
 
 - **Feature** — Description.
-  → [Week 07](../W07/2026-W07-Heartbeat.md)
+  → [Week 07](2026-W07-Heartbeat.md)
 
 ---
 

@@ -5,7 +5,7 @@
 ▙▖▌▌▌ ▙▌▌▌▌▙▖▐▖▙▖
 ```                 
 
-Generates weekly and quarterly statements of work from PRs across GitHub, GitHub Enterprise, and Bitbucket Cloud. Writes output as Markdown files into your Obsidian journal vault.
+Chronicle turns your engineering activity into readable Markdown in your Obsidian vault. It runs three things: personal weekly and quarterly statements of work from your PRs (GitHub, GitHub Enterprise, and Bitbucket Cloud); a team heartbeat that groups a roster's PRs by domain rather than by person; and **L24**, a daily "last 24 hours" digest built from your AI conversations, authored PRs, checked TODOs, and calendar meetings. Summaries are written by your choice of AI provider (Anthropic, OpenAI-compatible, or a local Ollama model).
 
 ---
 
@@ -116,6 +116,8 @@ curl -u "you@email.com:YOUR_TOKEN" \
 
 ## Token Setup
 
+The env var names below (`TOKEN_GHE`, etc.) are examples. Name each one however you like, as long as it matches the `tokenEnvVar` of the matching account in `accounts.json`. The team heartbeat reuses the GHE account's token, and L24 reuses whichever account tokens you have set.
+
 ### GitHub Enterprise (GHE)
 
 Create a **classic personal access token** at:
@@ -169,6 +171,16 @@ TOKEN_BITBUCKET=ATATT3xxxxxxxxxxx
 
 ---
 
+## Disabling an Account
+
+Comment out the token in `.env`. The account entry in `accounts.json` is preserved and the account is silently skipped at runtime.
+
+```sh
+# TOKEN_BITBUCKET=ATATT3xxx  ← commented out = skipped
+```
+
+---
+
 ## Usage
 
 ### Weekly Summary
@@ -214,7 +226,9 @@ node src/chronicle/weekly.mjs --rebuild --week 2026-W25
 
 Language detection uses file extensions from PR diffs (`pulls.listFiles`). Requires `repo` scope and, on GHE with SSO, org authorization. If the token lacks access, the field is omitted rather than written as empty.
 
-Reads existing weekly summary files and checked TODO items from daily journal notes, then generates a unified quarterly narrative.
+### Quarterly Summary
+
+Reads existing weekly summary files and checked TODO items from daily journal notes, then generates a unified quarterly narrative with Mermaid charts (activity by week, language mix, and per-repo lines of code).
 
 ```sh
 # Current quarter
@@ -222,6 +236,9 @@ node src/chronicle/quarterly.mjs
 
 # Specific quarter
 node src/chronicle/quarterly.mjs --quarter 2026-Q2
+
+# Overwrite an existing quarterly file
+node src/chronicle/quarterly.mjs --quarter 2026-Q2 --force
 ```
 
 Requires weekly summaries to exist for the quarter first. Output: `VAULT/{year}/{year}-Q{q}-Summary.md`
@@ -251,7 +268,7 @@ Two optional touches:
 | Grouping | By account | By **domain**, via per-PR AI classification |
 | PRs | Authored + reviewed | Authored only |
 | Auth | One token per account | **Single shared read token** — reuses the `ghe` account in `accounts.json` |
-| Output | `VAULT/{year}/{ww}/…-Summary.md` | `TEAM/{year}/W{ww}/…-Heartbeat.md` |
+| Output | `VAULT/{year}/{ww}/…-Summary.md` | `TEAM/{year}/…-Heartbeat.md` |
 
 ### Configure `team.json`
 
@@ -259,7 +276,7 @@ Copy `team.example.json` to `team.json` (gitignored — it lists people). Two ke
 
 ```json
 {
-  "engineers": ["dcasey", "pcarson"],
+  "engineers": ["jbob", "jdoe", "jsmith"],
   "domains": [
     { "name": "UI",             "hint": "components, styling, UX, accessibility" },
     { "name": "Infrastructure", "hint": "CI/CD, deploys, build tooling, cloud config" },
@@ -301,7 +318,7 @@ node src/chronicle/team-quarterly.mjs --quarter 2026-Q2
 node src/chronicle/team-quarterly.mjs --quarter 2026-Q2 --force
 ```
 
-Weekly output: `TEAM/{year}/W{ww}/{year}-W{ww}-Heartbeat.md`, with a `## Domain` section per active domain, a synthesised team-wide `summary`, and a structured `domains:` frontmatter block (per-domain PR count, LOC, contributors, repos) that the quarterly rollup reads to build its Mermaid charts (activity rhythm, language mix, domain distribution).
+Weekly output: `TEAM/{year}/{year}-W{ww}-Heartbeat.md` (directly in the year folder, alongside the quarterly rollup), with a `## Domain` section per active domain, a synthesised team-wide `summary`, and a structured `domains:` frontmatter block (per-domain PR count, LOC, contributors, repos) that the quarterly rollup reads to build its Mermaid charts (activity rhythm, language mix, domain distribution).
 
 Quarterly output: `TEAM/{year}/{year}-Q{q}-Heartbeat.md`.
 
@@ -367,16 +384,6 @@ The base URL and a placeholder key are defaulted for you (override `OPENAI_BASE_
 
 ---
 
-## Disabling an Account
-
-Comment out the token in `.env`. The account entry in `accounts.json` is preserved and the account is silently skipped at runtime.
-
-```sh
-# TOKEN_BITBUCKET=ATATT3xxx  ← commented out = skipped
-```
-
----
-
 ## Vault Folder Structure Expected
 
 ```
@@ -392,12 +399,11 @@ VAULT/
 
 The week folder name must be the zero-padded ISO week number (`24`, not `Week 24`).
 
-The team heartbeat writes to its own tree (created automatically), using `W`-prefixed week folders:
+The team heartbeat writes to its own tree (created automatically); weekly digests and the quarterly rollup sit together in the year folder:
 
 ```
 TEAM/                                   ← OBSIDIAN_TEAM_PATH
   2026/
-    W27/
-      2026-W27-Heartbeat.md             ← written by team-weekly.mjs
+    2026-W27-Heartbeat.md               ← written by team-weekly.mjs
     2026-Q2-Heartbeat.md                ← written by team-quarterly.mjs
 ```
