@@ -13,6 +13,7 @@ import { join } from "path";
 import { loadEnv, required, expandHome, PROJECT_ROOT } from "./lib/env.mjs";
 import { pad, fmtDate, fmtDateShort, quarterBounds, isoWeek, weeksInRange } from "./lib/dates.mjs";
 import { callAI } from "./lib/ai.mjs";
+import { getStyleBlock } from "./lib/style.mjs";
 import { parseCheckedTodos } from "./lib/obsidian.mjs";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -35,6 +36,7 @@ loadEnv();
 
 const JOURNAL_ROOT   = expandHome(required("OBSIDIAN_VAULT_PATH"));
 const SUMMARY_PREFIX = process.env.SUMMARY_FILENAME_PREFIX || "Summary";
+const styleBlock     = getStyleBlock();
 
 const FLAG_FORCE = process.argv.includes("--force");
 
@@ -275,7 +277,7 @@ Instructions:
 - Use exact filenames from the ref: paths provided
 
 Accounts covered this quarter:
-${accountList}
+${accountList}${styleBlock}
 
 Return the following, in this exact order, with no preamble and no code fences:
 

@@ -291,6 +291,36 @@ export async function fetchAccountPRs(account, start, end, opts = {}) {
  * @param {Date}     start
  * @param {Date}     end
  */
+// All currently-open PRs authored by a user (no date bound).
+async function searchOpenAuthoredPRs(octokit, account) {
+  try {
+    const orgClause = account.org ? ` org:${account.org}` : "";
+    const q = `is:pr is:open author:${account.username}${orgClause}`;
+    const results = [];
+    let page = 1;
+    while (true) {
+      const { data } = await octokit.search.issuesAndPullRequests({ q, per_page: 100, page, sort: "updated", order: "desc" });
+      results.push(...data.items);
+      if (data.items.length < 100) break;
+      page++;
+    }
+    return results;
+  } catch { return []; }
+}
+
+// True if the PR has at least one commit dated within [start, end].
+async function hasCommitInRange(octokit, account, pr, start, end) {
+  const full = repoNameFromPR(pr, account);
+  const [owner, repo] = full.split("/");
+  try {
+    const { data: commits } = await octokit.pulls.listCommits({ owner, repo, pull_number: pr.number, per_page: 100 });
+    return commits.some(c => {
+      const d = new Date(c.commit?.committer?.date || c.commit?.author?.date || 0);
+      return d >= start && d <= end;
+    });
+  } catch { return false; }
+}
+
 export async function fetchTeamAuthoredPRs(account, usernames, start, end) {
   const host    = (account.host || "https://github.com").replace(/\/$/, "");
   const isGHE   = host !== "https://github.com";
@@ -310,6 +340,17 @@ export async function fetchTeamAuthoredPRs(account, usernames, start, end) {
     const updated = await searchPRs(octokit, acct, startStr, endStr, "updated");
     const byId = new Map();
     for (const pr of [...created, ...updated]) byId.set(pr.id ?? pr.html_url, pr);
+
+    // Precisely capture open PRs with a commit in-range, even if updated_at drifted
+    // out of the window (e.g. a later comment moved it). Only checks open PRs not
+    // already captured, so the extra commit-list calls stay few.
+    const openPrs = await searchOpenAuthoredPRs(octokit, acct);
+    for (const pr of openPrs) {
+      const key = pr.id ?? pr.html_url;
+      if (byId.has(key)) continue;
+      if (await hasCommitInRange(octokit, acct, pr, start, end)) byId.set(key, pr);
+    }
+
     let authored = await enrichAuthored([...byId.values()], octokit, acct);
     console.log(`  authored[${username}]: ${authored.length}`);
     for (const pr of authored) {

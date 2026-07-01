@@ -16,12 +16,14 @@ import { join, dirname } from "path";
 import { loadEnv, expandHome } from "./lib/env.mjs";
 import { pad, fmtDate, fmtDateShort, isoWeek, quarterBounds, weeksInRange } from "./lib/dates.mjs";
 import { callAI } from "./lib/ai.mjs";
+import { getStyleBlock } from "./lib/style.mjs";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 loadEnv();
 
 const SUMMARY_SUFFIX = process.env.TEAM_SUMMARY_FILENAME_SUFFIX || "Heartbeat";
+const styleBlock     = getStyleBlock();
 
 function resolveTeamRoot() {
   if (process.env.OBSIDIAN_TEAM_PATH) return expandHome(process.env.OBSIDIAN_TEAM_PATH);
@@ -202,7 +204,7 @@ Instructions:
 - Merge overlapping work across weeks into a single bullet.
 - Include Obsidian-relative source links after each bullet using the format:
   → [Week NN](../WNN/filename.md)
-- Use the exact filenames from the ref: paths provided.
+- Use the exact filenames from the ref: paths provided.${styleBlock}
 
 Return the following, in this exact order, with no preamble and no code fences:
 

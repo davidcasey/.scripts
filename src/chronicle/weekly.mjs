@@ -12,6 +12,7 @@ import { join } from "path";
 import { loadEnv, required, expandHome, loadAccounts } from "./lib/env.mjs";
 import { pad, fmtDate, fmtDateShort, isoWeek, weekBounds } from "./lib/dates.mjs";
 import { callAI } from "./lib/ai.mjs";
+import { getStyleBlock } from "./lib/style.mjs";
 import * as githubConnector    from "./connectors/github.mjs";
 import * as gheConnector       from "./connectors/ghe.mjs";
 import * as bitbucketConnector from "./connectors/bitbucket.mjs";
@@ -28,6 +29,7 @@ loadEnv();
 
 const JOURNAL_ROOT   = expandHome(required("OBSIDIAN_VAULT_PATH"));
 const SUMMARY_PREFIX = process.env.SUMMARY_FILENAME_PREFIX || "Summary";
+const styleBlock     = getStyleBlock();
 
 // ─── CLI args ─────────────────────────────────────────────────────────────────
 
@@ -127,7 +129,7 @@ Rules:
 - Use only the short repo name (e.g. "web-shared-services", not "PreCise/web-shared-services")
 - Features should be meaningful work a client or manager cares about
 - Skip pure chores, dependency bumps, or formatting-only PRs — output the heading and link but no bullets
-- Be specific and technical but readable
+- Be specific and technical but readable${styleBlock}
 
 Return ONLY the following, no preamble, no code fences:
 
