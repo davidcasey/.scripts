@@ -204,8 +204,8 @@ Created 3 test files.
 
 ---
 
-# Summarizer
+# Chronicle
 
-AI-driven weekly and quarterly PR summary pipeline that writes Obsidian-compatible Markdown into the journal vault. Fetches from GitHub, GHE, and Bitbucket; detects languages and per-repo LOC from diffs; generates Mermaid charts in quarterly rollups.
+AI-driven work-narrative pipeline that writes Obsidian-compatible Markdown into the vault. Personal PR summaries (weekly/quarterly across GitHub, GHE, and Bitbucket), a domain-grouped team heartbeat, and an "L24" daily digest that folds in AI conversations, authored PRs, checked TODOs, and calendar meetings.
 
-See [src/summarizer/SUMMARIZER.md](src/summarizer/SUMMARIZER.md) for setup, configuration, and usage.
+See [src/chronicle/CHRONICLE.md](src/chronicle/CHRONICLE.md) for setup, configuration, and usage.

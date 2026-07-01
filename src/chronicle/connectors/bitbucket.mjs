@@ -1,5 +1,5 @@
 /**
- * connector-bitbucket.mjs
+ * connectors/bitbucket.mjs
  * Fetches authored PRs for Bitbucket Cloud accounts.
  *
  * Expected account fields: { name, workspace, username, email, token }

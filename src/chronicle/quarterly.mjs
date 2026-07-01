@@ -1,41 +1,25 @@
 #!/usr/bin/env node
 /**
- * quarterly-summary.mjs
+ * quarterly.mjs
  * Reads weekly summary .md files + daily journal ## TODO checked items
  * for a quarter, combines them with AI, and writes a quarterly summary
  * to the year folder.
  *
- * Usage: node src/summarizer/quarterly-summary.mjs [--quarter 2026-Q1]
+ * Usage: node src/chronicle/quarterly.mjs [--quarter 2026-Q1]
  */
 
 import { readFileSync, writeFileSync, existsSync, readdirSync } from "fs";
-import { join, resolve, dirname } from "path";
-import { homedir } from "os";
-import { fileURLToPath } from "url";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { join } from "path";
+import { loadEnv, required, expandHome, PROJECT_ROOT } from "./lib/env.mjs";
+import { pad, fmtDate, fmtDateShort, quarterBounds, isoWeek, weeksInRange } from "./lib/dates.mjs";
+import { callAI } from "./lib/ai.mjs";
+import { parseCheckedTodos } from "./lib/obsidian.mjs";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-function loadEnv() {
-  const envPath = join(__dirname, ".env");
-  if (!existsSync(envPath)) {
-    console.error(`Missing .env at ${envPath}\nCopy .env.example and fill it in.`);
-    process.exit(1);
-  }
-  for (const line of readFileSync(envPath, "utf8").split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
-    process.env[key] ??= val;
-  }
-}
-
+// All accounts (no token filter) with host/isGHE — used only to list account names in the prompt.
 function loadAccounts() {
-  const accountsPath = join(__dirname, "accounts.json");
+  const accountsPath = join(PROJECT_ROOT, "accounts.json");
   if (!existsSync(accountsPath)) {
     console.error(`Missing accounts.json at ${accountsPath}`);
     process.exit(1);
@@ -47,59 +31,10 @@ function loadAccounts() {
   });
 }
 
-function required(key) {
-  if (!process.env[key]) { console.error(`Missing required env var: ${key}`); process.exit(1); }
-  return process.env[key];
-}
-
-function expandHome(p) {
-  return p.startsWith("~") ? join(homedir(), p.slice(1)) : resolve(p);
-}
-
 loadEnv();
 
 const JOURNAL_ROOT   = expandHome(required("OBSIDIAN_VAULT_PATH"));
 const SUMMARY_PREFIX = process.env.SUMMARY_FILENAME_PREFIX || "Summary";
-const AI_PROVIDER    = (process.env.AI_PROVIDER || "anthropic").toLowerCase();
-const ANTHROPIC_KEY  = process.env.ANTHROPIC_API_KEY;
-const OPENAI_KEY     = process.env.OPENAI_API_KEY;
-const OPENAI_BASE    = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-const AI_MODEL       = process.env.AI_MODEL;
-
-// ─── Date helpers ─────────────────────────────────────────────────────────────
-
-function pad(n) { return String(n).padStart(2, "0"); }
-function fmtDate(d) { return d.toISOString().slice(0, 10); }
-function fmtDateShort(d) {
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-}
-
-function quarterBounds(year, q) {
-  const startMonth = (q - 1) * 3;
-  const start = new Date(Date.UTC(year, startMonth, 1));
-  const end   = new Date(Date.UTC(year, startMonth + 3, 0, 23, 59, 59, 999));
-  return { start, end };
-}
-
-function isoWeek(date) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const day = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - day);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-  return { year: d.getUTCFullYear(), week };
-}
-
-function weeksInRange(start, end) {
-  const weeks = [];
-  const cursor = new Date(start);
-  while (cursor.getUTCDay() !== 1) cursor.setUTCDate(cursor.getUTCDate() + 1);
-  while (cursor <= end) {
-    weeks.push(isoWeek(cursor));
-    cursor.setUTCDate(cursor.getUTCDate() + 7);
-  }
-  return weeks;
-}
 
 const FLAG_FORCE = process.argv.includes("--force");
 
@@ -145,20 +80,6 @@ function readWeeklySummaries(year, q) {
 // ─── Reading daily TODOs ───────────────────────────────────────────────────────
 
 const DAY_FILE_RE = /^\d{4}-\d{2}-\d{2}-.+\.md$/;
-
-function parseCheckedTodos(content) {
-  const lines = content.split("\n");
-  let inTodo = false;
-  const items = [];
-  for (const line of lines) {
-    if (/^## TODO\s*$/.test(line)) { inTodo = true; continue; }
-    if (inTodo && /^## /.test(line)) break;
-    if (inTodo && /^- \[x\]/i.test(line)) {
-      items.push(line.replace(/^- \[x\]\s*/i, "").trim());
-    }
-  }
-  return items;
-}
 
 function readDailyTodos(year, q) {
   const { start, end } = quarterBounds(year, q);
@@ -394,32 +315,6 @@ DAILY TODO ITEMS:
 ${todoContext}`;
 }
 
-async function callAI(prompt) {
-  if (AI_PROVIDER === "openai") {
-    if (!OPENAI_KEY) { console.error("OPENAI_API_KEY not set"); process.exit(1); }
-    const { default: OpenAI } = await import("openai");
-    const client = new OpenAI({ apiKey: OPENAI_KEY, baseURL: OPENAI_BASE });
-    const model = AI_MODEL || "gpt-4o";
-    console.log(`AI: OpenAI (${model})`);
-    const resp = await client.chat.completions.create({
-      model, max_tokens: 8096,
-      messages: [{ role: "user", content: prompt }],
-    });
-    return resp.choices[0].message.content.trim();
-  } else {
-    if (!ANTHROPIC_KEY) { console.error("ANTHROPIC_API_KEY not set"); process.exit(1); }
-    const { default: Anthropic } = await import("@anthropic-ai/sdk");
-    const client = new Anthropic({ apiKey: ANTHROPIC_KEY });
-    const model = AI_MODEL || "claude-sonnet-4-6";
-    console.log(`AI: Anthropic (${model})`);
-    const msg = await client.messages.create({
-      model, max_tokens: 8096,
-      messages: [{ role: "user", content: prompt }],
-    });
-    return msg.content[0].text.trim();
-  }
-}
-
 function parseAIResponse(raw) {
   const summaryMatch = raw.match(/^SUMMARY:\s*(.+?)$/m);
   const summary = summaryMatch ? summaryMatch[1].trim().replace(/^"|"$/g, "") : "";
@@ -483,7 +378,7 @@ async function main() {
   console.log(`  Found ${summaries.length} weekly summaries`);
 
   if (!summaries.length) {
-    console.error("No weekly summaries found for this quarter. Run summary-weekly.mjs first.");
+    console.error("No weekly summaries found for this quarter. Run weekly.mjs first.");
     process.exit(1);
   }
 
@@ -497,7 +392,7 @@ async function main() {
   const prompt   = buildPrompt(year, q, accounts, summaries, dailyTodos);
 
   console.log("Calling AI…");
-  const aiOutput = await callAI(prompt);
+  const aiOutput = await callAI(prompt, 8096);
   const { summary, body } = parseAIResponse(aiOutput);
 
   writeFileSync(outFile, buildMarkdown(year, q, summary, body, charts), "utf8");

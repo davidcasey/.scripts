@@ -24,5 +24,7 @@ Thumbs.db
 
 # Environment files
 .env
+*.bak
 .npmrc
-src/summarizer/accounts.json
+src/chronicle/accounts.json
+src/chronicle/team.json

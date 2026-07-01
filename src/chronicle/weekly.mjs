@@ -1,21 +1,20 @@
 #!/usr/bin/env node
 /**
- * summary-weekly.mjs
+ * weekly.mjs
  * Generates a weekly statement-of-work from PRs across all configured
  * accounts and writes it to your Obsidian journal.
  *
- * Usage: node src/summarizer/summary-weekly.mjs [--week 2026-W18] [--latest]
+ * Usage: node src/chronicle/weekly.mjs [--week 2026-W18] [--latest]
  */
 
 import { readFileSync, writeFileSync, existsSync, readdirSync } from "fs";
-import { join, resolve, dirname } from "path";
-import { homedir } from "os";
-import { fileURLToPath } from "url";
-import * as githubConnector    from "./connector-github.mjs";
-import * as gheConnector       from "./connector-ghe.mjs";
-import * as bitbucketConnector from "./connector-bitbucket.mjs";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { join } from "path";
+import { loadEnv, required, expandHome, loadAccounts } from "./lib/env.mjs";
+import { pad, fmtDate, fmtDateShort, isoWeek, weekBounds } from "./lib/dates.mjs";
+import { callAI } from "./lib/ai.mjs";
+import * as githubConnector    from "./connectors/github.mjs";
+import * as gheConnector       from "./connectors/ghe.mjs";
+import * as bitbucketConnector from "./connectors/bitbucket.mjs";
 
 const CONNECTORS = {
   github:    githubConnector,
@@ -25,86 +24,10 @@ const CONNECTORS = {
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-function loadEnv() {
-  const envPath = join(__dirname, ".env");
-  if (!existsSync(envPath)) {
-    console.error(`Missing .env file at ${envPath}\nCopy .env.example and fill it in.`);
-    process.exit(1);
-  }
-  for (const line of readFileSync(envPath, "utf8").split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
-    process.env[key] ??= val;
-  }
-}
-
-function loadAllAccounts() {
-  const accountsPath = join(__dirname, "accounts.json");
-  if (!existsSync(accountsPath)) {
-    console.error(`Missing accounts.json at ${accountsPath}`);
-    process.exit(1);
-  }
-  const raw = JSON.parse(readFileSync(accountsPath, "utf8"));
-  return raw.flatMap(a => {
-    const token = process.env[a.tokenEnvVar];
-    if (!token) {
-      console.log(`Skipping ${a.accountDisplayName} (${a.type}) — ${a.tokenEnvVar} not set.`);
-      return [];
-    }
-    return [{ ...a, token }];
-  });
-}
-
-function required(key) {
-  if (!process.env[key]) { console.error(`Missing required env var: ${key}`); process.exit(1); }
-  return process.env[key];
-}
-
-function expandHome(p) {
-  return p.startsWith("~") ? join(homedir(), p.slice(1)) : resolve(p);
-}
-
 loadEnv();
 
 const JOURNAL_ROOT   = expandHome(required("OBSIDIAN_VAULT_PATH"));
 const SUMMARY_PREFIX = process.env.SUMMARY_FILENAME_PREFIX || "Summary";
-const AI_PROVIDER    = (process.env.AI_PROVIDER || "anthropic").toLowerCase();
-const ANTHROPIC_KEY  = process.env.ANTHROPIC_API_KEY;
-const OPENAI_KEY     = process.env.OPENAI_API_KEY;
-const OPENAI_BASE    = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-const AI_MODEL       = process.env.AI_MODEL;
-
-// ─── Date helpers ─────────────────────────────────────────────────────────────
-
-function isoWeek(date) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const day = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - day);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-  return { year: d.getUTCFullYear(), week };
-}
-
-function weekBounds(year, week) {
-  const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
-  const dow = simple.getUTCDay() || 7;
-  const monday = new Date(simple);
-  monday.setUTCDate(simple.getUTCDate() + 1 - dow);
-  const sunday = new Date(monday);
-  sunday.setUTCDate(monday.getUTCDate() + 6);
-  sunday.setUTCHours(23, 59, 59, 999);
-  return { start: monday, end: sunday };
-}
-
-function pad(n) { return String(n).padStart(2, "0"); }
-function fmtDate(d) { return d.toISOString().slice(0, 10); }
-function fmtDateShort(d) {
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-}
 
 // ─── CLI args ─────────────────────────────────────────────────────────────────
 
@@ -219,31 +142,6 @@ PRs:
 ${prText}`;
 }
 
-async function callAI(prompt, maxTokens = 2048) {
-  if (AI_PROVIDER === "openai") {
-    if (!OPENAI_KEY) { console.error("OPENAI_API_KEY not set"); process.exit(1); }
-    const { default: OpenAI } = await import("openai");
-    const client = new OpenAI({ apiKey: OPENAI_KEY, baseURL: OPENAI_BASE });
-    const model = AI_MODEL || "gpt-4o";
-    console.log(`  AI: OpenAI (${model})`);
-    const resp = await client.chat.completions.create({
-      model, max_tokens: maxTokens,
-      messages: [{ role: "user", content: prompt }],
-    });
-    return resp.choices[0].message.content.trim();
-  } else {
-    if (!ANTHROPIC_KEY) { console.error("ANTHROPIC_API_KEY not set"); process.exit(1); }
-    const { default: Anthropic } = await import("@anthropic-ai/sdk");
-    const client = new Anthropic({ apiKey: ANTHROPIC_KEY });
-    const model = AI_MODEL || "claude-sonnet-4-6";
-    console.log(`  AI: Anthropic (${model})`);
-    const msg = await client.messages.create({
-      model, max_tokens: maxTokens,
-      messages: [{ role: "user", content: prompt }],
-    });
-    return msg.content[0].text.trim();
-  }
-}
 
 function parseAIResponse(raw) {
   const summaryMatch = raw.match(/^SUMMARY:\s*(.+?)(?=\n\nPR_LIST:|\nPR_LIST:)/s);
@@ -330,7 +228,7 @@ ${sections.join("\n\n---\n\n")}
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const accounts = loadAllAccounts();
+  const accounts = loadAccounts();
 
   let toProcess;
 

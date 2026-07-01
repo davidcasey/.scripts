@@ -1,0 +1,8 @@
+{
+  "engineers": ["jbob", "jdoe", "jsmith"],
+  "domains": [
+    { "name": "UI",             "hint": "components, styling, UX, accessibility" },
+    { "name": "Infrastructure", "hint": "CI/CD, deploys, build tooling, cloud config" },
+    { "name": "Mapping",        "hint": "geospatial features, tiles, routing" }
+  ]
+}

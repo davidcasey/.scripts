@@ -1,7 +1,7 @@
 /**
- * connector-github.mjs
+ * connectors/github.mjs
  * Fetches authored and reviewed PRs for GitHub.com accounts.
- * Also used by connector-ghe.mjs for GitHub Enterprise (same API, different host).
+ * Also used by connectors/ghe.mjs for GitHub Enterprise (same API, different host).
  *
  * Expected account fields: { name, username, org, token, host }
  */
@@ -60,10 +60,10 @@ function shortRepoName(fullName) {
   return fullName.includes("/") ? fullName.split("/")[1] : fullName;
 }
 
-async function searchPRs(octokit, account, startStr, endStr) {
+async function searchPRs(octokit, account, startStr, endStr, dateField = "created") {
   try {
     const orgClause = account.org ? ` org:${account.org}` : "";
-    const q = `is:pr author:${account.username} created:${startStr}..${endStr}${orgClause}`;
+    const q = `is:pr author:${account.username} ${dateField}:${startStr}..${endStr}${orgClause}`;
     console.log(`  [search] ${q}`);
     const results = [];
     let page = 1;
@@ -216,14 +216,17 @@ async function enrichAuthored(prs, octokit, account) {
     const [owner, repo] = repoName.split("/");
     try {
       const { data } = await octokit.pulls.get({ owner, repo, pull_number: pr.number });
-      return { ...pr, body: data.body || "", _repoFullName: repoName };
+      return { ...pr, body: data.body || "", state: data.state, merged: data.merged, draft: data.draft, _repoFullName: repoName };
     } catch {
       return { ...pr, _repoFullName: repoName };
     }
   }));
 }
 
-export async function fetchAccountPRs(account, start, end) {
+// opts.noFallback  — skip the slow repo-enumeration fallback when search returns 0
+//                    (search is reliable for short windows; good for daily runs).
+// opts.skipReviewed — don't fetch reviewed PRs at all (callers that only need authored).
+export async function fetchAccountPRs(account, start, end, opts = {}) {
   const host    = (account.host || "https://github.com").replace(/\/$/, "");
   const isGHE   = host !== "https://github.com";
   const apiBase = isGHE ? `${host}/api/v3` : "https://api.github.com";
@@ -236,7 +239,7 @@ export async function fetchAccountPRs(account, start, end) {
 
   let authored = await searchPRs(octokit, resolved, startStr, endStr);
   let repos = null;
-  if (authored.length === 0) {
+  if (authored.length === 0 && !opts.noFallback) {
     repos = await enumerateActiveRepos(octokit, resolved);
     if (repos !== null) {
       authored = await enumerateAuthoredPRs(octokit, resolved, repos, start, end);
@@ -245,14 +248,17 @@ export async function fetchAccountPRs(account, start, end) {
   authored = await enrichAuthored(authored, octokit, resolved);
   console.log(`  authored: ${authored.length}`);
 
-  let reviewed = await searchReviewedPRs(octokit, resolved, startStr, endStr);
-  if (reviewed.length === 0) {
-    if (repos === null) repos = await enumerateActiveRepos(octokit, resolved);
-    if (repos !== null) {
-      reviewed = await enumerateReviewedPRs(octokit, resolved, repos, start, end);
+  let reviewed = [];
+  if (!opts.skipReviewed) {
+    reviewed = await searchReviewedPRs(octokit, resolved, startStr, endStr);
+    if (reviewed.length === 0 && !opts.noFallback) {
+      if (repos === null) repos = await enumerateActiveRepos(octokit, resolved);
+      if (repos !== null) {
+        reviewed = await enumerateReviewedPRs(octokit, resolved, repos, start, end);
+      }
     }
+    console.log(`  reviewed: ${reviewed.length}`);
   }
-  console.log(`  reviewed: ${reviewed.length}`);
 
   // Normalise shape for summary scripts
   return {
@@ -271,6 +277,91 @@ export async function fetchAccountPRs(account, start, end) {
       _repoName: shortRepoName(repoNameFromPR(pr, resolved)),
     })),
   };
+}
+
+// ─── Team fetch (authored-only, multiple users, shared token) ────────────────
+
+/**
+ * Fetch authored PRs for a roster of usernames using a single shared token.
+ * Reuses the same search + enrich path as fetchAccountPRs, but authored-only
+ * and tagged with the author. Returns a flat, de-duplicated, normalised list.
+ *
+ * @param {object}   account   { host, org, token } — one shared read account
+ * @param {string[]} usernames GHE logins to fetch authored PRs for
+ * @param {Date}     start
+ * @param {Date}     end
+ */
+export async function fetchTeamAuthoredPRs(account, usernames, start, end) {
+  const host    = (account.host || "https://github.com").replace(/\/$/, "");
+  const isGHE   = host !== "https://github.com";
+  const apiBase = isGHE ? `${host}/api/v3` : "https://api.github.com";
+  const resolved = { ...account, apiBase };
+
+  const octokit  = await makeOctokit(resolved);
+  const startStr = fmtDate(start);
+  const endStr   = fmtDate(end);
+
+  const all = [];
+  for (const username of usernames) {
+    const acct = { ...resolved, username };
+    // Match PRs created OR updated in-range so long-running / still-open work
+    // opened before the week is still captured (not just PRs born this week).
+    const created = await searchPRs(octokit, acct, startStr, endStr, "created");
+    const updated = await searchPRs(octokit, acct, startStr, endStr, "updated");
+    const byId = new Map();
+    for (const pr of [...created, ...updated]) byId.set(pr.id ?? pr.html_url, pr);
+    let authored = await enrichAuthored([...byId.values()], octokit, acct);
+    console.log(`  authored[${username}]: ${authored.length}`);
+    for (const pr of authored) {
+      const fullName = repoNameFromPR(pr, acct);
+      const merged = pr.merged ?? !!pr.pull_request?.merged_at;
+      const status = pr.draft ? "draft" : merged ? "merged" : pr.state === "open" ? "open" : "closed";
+      all.push({
+        number:    pr.number,
+        title:     pr.title,
+        state:     pr.state,
+        body:      pr.body || "",
+        html_url:  pr.html_url,
+        created_at: pr.created_at,
+        _status:       status,
+        _repoName:     shortRepoName(fullName),
+        _repoFullName: fullName,
+        _author:       username,
+      });
+    }
+  }
+
+  // De-dupe by repo#number (guards against roster overlap / co-authored edge cases)
+  const seen = new Set();
+  return all.filter(pr => {
+    const key = `${pr._repoFullName}#${pr.number}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * Resolve GHE/GitHub logins to display names (user.name), falling back to the
+ * login when a profile has no name set. Used so the team roster needn't be
+ * hand-maintained — names come straight from the authors of fetched PRs.
+ */
+export async function fetchUserDisplayNames(account, logins) {
+  const host    = (account.host || "https://github.com").replace(/\/$/, "");
+  const isGHE   = host !== "https://github.com";
+  const apiBase = isGHE ? `${host}/api/v3` : "https://api.github.com";
+  const octokit = await makeOctokit({ ...account, apiBase });
+
+  const names = {};
+  await withConcurrency([...new Set(logins)], 5, async login => {
+    try {
+      const { data } = await octokit.users.getByUsername({ username: login });
+      names[login] = data.name || login;
+    } catch {
+      names[login] = login;
+    }
+  });
+  return names;
 }
 
 // ─── PR language detection ───────────────────────────────────────────────────
@@ -329,4 +420,47 @@ export async function fetchPRLanguages(account, prs) {
   });
 
   return { langChanges, repoChanges }; // line-change counts — caller normalises to %
+}
+
+/**
+ * Per-PR changed-file paths + line counts, plus aggregate language mix.
+ * Used by the team heartbeat: file paths are a strong signal for classifying a
+ * PR into a domain (e.g. .github/workflows/* → Infra, *.scss/*.tsx → UI), and
+ * per-PR line counts let LOC be attributed per domain (domains are per-PR, so
+ * repo-level totals are not enough).
+ *
+ * @returns {{ perPR: Record<string, {files: string[], lines: number}>, langChanges: Record<string, number> }}
+ *          perPR keyed by `${_repoName}#${number}`.
+ */
+export async function fetchPRFileData(account, prs, maxFilesPerPR = 40) {
+  const host    = (account.host || 'https://github.com').replace(/\/$/, '');
+  const isGHE   = host !== 'https://github.com';
+  const apiBase = isGHE ? `${host}/api/v3` : 'https://api.github.com';
+  const octokit = await makeOctokit({ ...account, apiBase });
+  const owner   = account.org || account.username;
+
+  const perPR = {};
+  const langChanges = {};
+  await withConcurrency(prs, 5, async pr => {
+    const key = `${pr._repoName}#${pr.number}`;
+    perPR[key] = { files: [], lines: 0 };
+    try {
+      const { data: files } = await octokit.pulls.listFiles({
+        owner, repo: pr._repoName, pull_number: pr.number, per_page: 100,
+      });
+      for (const file of files) {
+        const delta = file.changes || 1;
+        perPR[key].lines += delta;
+        if (perPR[key].files.length < maxFilesPerPR) perPR[key].files.push(file.filename);
+        const lang = extToLang(file.filename);
+        if (lang) langChanges[lang] = (langChanges[lang] || 0) + delta;
+      }
+    } catch (e) {
+      if (e.status !== 403) {
+        console.warn(`  [files] ${owner}/${pr._repoName}#${pr.number}: ${e.status ?? e.message}`);
+      }
+    }
+  });
+
+  return { perPR, langChanges };
 }
